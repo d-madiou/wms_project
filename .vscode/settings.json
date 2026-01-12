@@ -1,0 +1,15 @@
+{
+    "sqltools.connections": [
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5433,
+            "driver": "PostgreSQL",
+            "name": "WMS Local",
+            "database": "wms_db",
+            "username": "wms_user",
+            "password": "wms_password_123"
+        }
+    ]
+}

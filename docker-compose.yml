@@ -1,0 +1,70 @@
+# In this Docker Compose file, we define services including a PostgreSQL database, # a Django backend, a React frontend using Vite, and an Nginx reverse proxy.
+
+version: '3.8'
+
+services:
+  # Let's Database
+  db:
+    image: postgres:15-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - .env
+    networks:
+      - wms_network
+    ports:
+      - "5433:5432"
+
+  # Let's build the Backend (Django)
+  backend:
+    build: ./backend
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./backend:/app
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    expose:
+      - 8000
+    env_file:
+      - .env
+    depends_on:
+      - db
+    networks:
+      - wms_network
+
+  # Frontend (React + Vite)
+  frontend:
+    build: ./frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    networks:
+      - wms_network
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+
+  # Nginx (Reverse Proxy)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - wms_network
+
+networks:
+  wms_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  static_volume:
+  media_volume:
