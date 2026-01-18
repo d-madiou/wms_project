@@ -1,15 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import axios from "axios"; 
 import Layout from "../components/Layout";
-import InventoryService from "../services/inventory.service";
-import StockService from "../services/stock.service";
 
 const Dashboard = () => {
   const [stats, setStats] = useState({
-    totalProducts: 0,
-    totalStockQuantity: 0,
-    lowStockCount: 0,
-    totalValue: 0,
+    total_products: 0,
+    total_stock_quantity: 0,
+    low_stock_count: 0,
+    recent_activity: [] 
   });
   const [loading, setLoading] = useState(true);
   const userRole = localStorage.getItem("user_role");
@@ -20,26 +19,14 @@ const Dashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      // Parallel data fetching for performance
-      const [productsRes, stockRes] = await Promise.all([
-        InventoryService.getAllProducts(),
-        StockService.getStockItems()
-      ]);
-
-      const products = productsRes.data;
-      const stockItems = stockRes.data;
-
-      // Calculate Metrics
-      const totalStock = stockItems.reduce((acc, item) => acc + item.quantity, 0);
-      
-      // Simple logic: If a stock item has less than 10 units, count as low stock
-      const lowStock = stockItems.filter(item => item.quantity < 10).length;
-
-      setStats({
-        totalProducts: products.length,
-        totalStockQuantity: totalStock,
-        lowStockCount: lowStock,
+      const token = localStorage.getItem("access_token");
+      const response = await axios.get("http://localhost:8000/api/dashboard/stats/", {
+        headers: {
+            "Authorization": `Bearer ${token}`
+        }
       });
+
+      setStats(response.data);
     } catch (err) {
       console.error("Failed to load dashboard data", err);
     } finally {
@@ -65,7 +52,7 @@ const Dashboard = () => {
           <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider">Product Catalog</h3>
           <div className="mt-4 flex items-baseline">
             <span className="text-3xl font-bold text-gray-900">
-              {loading ? "-" : stats.totalProducts}
+              {loading ? "-" : stats.total_products}
             </span>
             <span className="ml-2 text-sm text-gray-500">unique SKUs</span>
           </div>
@@ -76,7 +63,7 @@ const Dashboard = () => {
           <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider">Total Inventory On Hand</h3>
           <div className="mt-4 flex items-baseline">
             <span className="text-3xl font-bold text-gray-900">
-              {loading ? "-" : stats.totalStockQuantity}
+              {loading ? "-" : stats.total_stock_quantity}
             </span>
             <span className="ml-2 text-sm text-gray-500">units</span>
           </div>
@@ -87,42 +74,87 @@ const Dashboard = () => {
           <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider">Low Stock Alerts</h3>
           <div className="mt-4 flex items-baseline">
             <span className="text-3xl font-bold text-gray-900">
-              {loading ? "-" : stats.lowStockCount}
+              {loading ? "-" : stats.low_stock_count}
             </span>
             <span className="ml-2 text-sm text-gray-500">locations needs attention</span>
           </div>
         </div>
       </div>
 
-      {/* Quick Actions / Shortcuts Section */}
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">Quick Actions</h3>
-        <div className="flex gap-4">
-          
-          <Link 
-            to="/stock" 
-            className="px-4 py-2 bg-gray-50 border border-gray-200 text-gray-700 rounded text-sm font-medium hover:bg-gray-100 hover:border-gray-300 transition-colors"
-          >
-            Check Stock Levels
-          </Link>
-
-          {/* Only show if Admin/Manager */}
-          {['admin', 'manager'].includes(userRole) && (
-            <Link 
-              to="/inventory" 
-              className="px-4 py-2 bg-gray-50 border border-gray-200 text-gray-700 rounded text-sm font-medium hover:bg-gray-100 hover:border-gray-300 transition-colors"
-            >
-              Manage Products
-            </Link>
-          )}
-
-          <Link 
-            to="/history" 
-            className="px-4 py-2 bg-gray-50 border border-gray-200 text-gray-700 rounded text-sm font-medium hover:bg-gray-100 hover:border-gray-300 transition-colors"
-          >
-            View Audit Log
-          </Link>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* LEFT COLUMN: Recent Activity (Takes up 2/3 width on large screens) */}
+        <div className="lg:col-span-2 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+            <div className="p-4 bg-gray-50 border-b border-gray-100">
+                <h3 className="text-lg font-bold text-gray-700">Recent Movements</h3>
+            </div>
+            <table className="min-w-full text-left">
+                <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-medium">
+                    <tr>
+                        <th className="px-6 py-3">Action</th>
+                        <th className="px-6 py-3">Qty</th>
+                        <th className="px-6 py-3">User</th>
+                        <th className="px-6 py-3 text-right">Time</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-sm">
+                    {loading ? (
+                         <tr><td colSpan="4" className="px-6 py-4 text-center">Loading...</td></tr>
+                    ) : stats.recent_activity && stats.recent_activity.length > 0 ? (
+                        stats.recent_activity.map((item, index) => (
+                            <tr key={index} className="hover:bg-gray-50">
+                                <td className="px-6 py-3 font-medium text-gray-800">{item.action}</td>
+                                <td className="px-6 py-3">
+                                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                                        item.action.includes('IN') 
+                                        ? 'bg-green-100 text-green-700' 
+                                        : 'bg-orange-500 text-black'
+                                    }`}>
+                                        {item.quantity}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-3 text-gray-600">{item.user}</td>
+                                <td className="px-6 py-3 text-right text-gray-400">{item.time}</td>
+                            </tr>
+                        ))
+                    ) : (
+                        <tr><td colSpan="4" className="px-6 py-4 text-center text-gray-500">No activity yet.</td></tr>
+                    )}
+                </tbody>
+            </table>
         </div>
+
+        {/* RIGHT COLUMN: Quick Actions (Takes up 1/3 width) */}
+        <div className="lg:col-span-1 bg-white border border-gray-200 rounded-lg shadow-sm p-6 h-fit">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">Quick Actions</h3>
+            <div className="flex flex-col gap-3">
+            
+            <Link 
+                to="/stock" 
+                className="w-full text-center px-4 py-3 bg-blue-50 border border-blue-100 text-blue-700 rounded-md text-sm font-medium hover:bg-blue-100 transition-colors"
+            >
+                 Move Stock (In/Out)
+            </Link>
+
+            {/* Only show if Admin/Manager */}
+            {['admin', 'manager'].includes(userRole) && (
+                <Link 
+                to="/inventory" 
+                className="w-full text-center px-4 py-3 bg-gray-50 border border-gray-200 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-100 transition-colors"
+                >
+                 Manage Products
+                </Link>
+            )}
+
+            <Link 
+                to="/history" 
+                className="w-full text-center px-4 py-3 bg-gray-50 border border-gray-200 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-100 transition-colors"
+            >
+                 View History
+            </Link>
+            </div>
+        </div>
+
       </div>
     </Layout>
   );

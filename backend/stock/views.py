@@ -1,91 +1,64 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, permissions
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 from .models import StockItem, StockMovement
 from .serializers import StockItemSerializer, StockMovementSerializer
-from rest_framework.decorators import action
-from users.permissions import IsOperatorOrHigher
 
+# 1. StockItemViewSet: Keeps track of "State" (How many items in a bin?)
+# We keep this simple. No complex logic here.
 class StockItemViewSet(viewsets.ModelViewSet):
     queryset = StockItem.objects.all()
     serializer_class = StockItemSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
 
-    def create(self, request, *args, **kwargs):
-        """
-        Custom logic: If stock exists for (product, location), add to quantity.
-        Otherwise, create new.
-        """
-        product_id = request.data.get('product')
-        location_id = request.data.get('location')
-        quantity = int(request.data.get('quantity', 0))
-
-        # --- LOGIC START ---
-        existing_stock = StockItem.objects.filter(product_id=product_id, location_id=location_id).first()
-
-        if existing_stock:
-            existing_stock.quantity += quantity
-            existing_stock.save()
-            response_data = self.get_serializer(existing_stock).data
-        else:
-            # Standard Create
-            response = super().create(request, *args, **kwargs)
-            response_data = response.data
-        
-        # === 📝 AUDIT LOG (NEW) ===
-        StockMovement.objects.create(
-            product_id=product_id,
-            location_id=location_id,
-            quantity=quantity,
-            movement_type='IN',
-            user=request.user
-        )
-        
-        return Response(response_data, status=status.HTTP_200_OK)
-        
-    @action(detail=False, methods=['post'])
-    def ship(self, request):
-        """
-        Custom Endpoint: /api/stock/ship/
-        Reduces quantity. Fails if not enough stock.
-        """
-        product_id = request.data.get('product')
-        location_id = request.data.get('location')
-        quantity = int(request.data.get('quantity', 0))
-
-        stock_item = StockItem.objects.filter(product_id=product_id, location_id=location_id).first()
-
-        if not stock_item:
-            return Response({"error": "Stock not found"}, status=404)
-        if stock_item.quantity < quantity:
-            return Response({"error": "Not enough stock"}, status=400)
-
-        stock_item.quantity -= quantity
-        stock_item.save()
-
-        # === 📝 AUDIT LOG (NEW) ===
-        StockMovement.objects.create(
-            product_id=product_id,
-            location_id=location_id,
-            quantity=quantity,
-            movement_type='OUT',
-            user=request.user
-        )
-
-        return Response({"status": "shipped"}, status=200)
-    
-class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    Read-only view for history. No deleting history allowed!
-    """
+# 2. StockMovementViewSet: Keeps track of "Events" (In/Out)
+# This is where the frontend sends requests.
+class StockMovementViewSet(viewsets.ModelViewSet): # <--- Changed from ReadOnlyModelViewSet to ModelViewSet
     queryset = StockMovement.objects.all().order_by('-created_at')
     serializer_class = StockMovementSerializer
-    
-    def get_permissions(self):
-        # READ: Everyone (including Drivers)
-        if self.action in ['list', 'retrieve']:
-            permission_classes = [IsAuthenticated]
-        # WRITE: Only Operators and up (No Drivers)
-        else:
-            permission_classes = [IsOperatorOrHigher]
-        return [permission() for permission in permission_classes]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        try:
+            # --- 1. Extract Data ---
+            product_id = request.data.get('product')
+            location_id = request.data.get('location')
+            quantity = request.data.get('quantity')
+            movement_type = request.data.get('movement_type')
+            
+            # --- 2. Validation ---
+            if not all([product_id, location_id, quantity, movement_type]):
+                return Response(
+                    {"detail": "Missing required fields."}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # --- 3. Ensure the Stock Bin Exists ---
+            # Even though we are creating a Movement, we need to ensure the Bin exists 
+            # so the Signal (signals.py) can find it and do the math later.
+            if movement_type == 'IN':
+                StockItem.objects.get_or_create(
+                    product_id=product_id, 
+                    location_id=location_id,
+                    defaults={'quantity': 0}
+                )
+            
+            # --- 4. Prepare Data for Serializer ---
+            # We explicitly map the IDs so the serializer validates correctly.
+            data = {
+                'product': product_id,
+                'location': location_id,
+                'movement_type': movement_type,
+                'quantity': quantity,
+                'notes': request.data.get('notes', ''),
+                'user': request.user.id
+            }
+
+            # --- 5. Save ---
+            serializer = self.get_serializer(data=data)
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+            
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)

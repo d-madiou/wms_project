@@ -6,7 +6,7 @@ const Inventory = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Role Check
+  
   const userRole = localStorage.getItem("user_role");
   const canEdit = ["admin", "manager"].includes(userRole);
 

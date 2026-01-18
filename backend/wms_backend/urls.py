@@ -7,6 +7,7 @@ from users.views import RegisterView, UserProfileView
 from warehouses.views import WarehouseViewSet, LocationViewSet
 from inventory.views import CategoryViewSet, ProductViewSet
 from stock.views import StockItemViewSet, StockMovementViewSet
+from inventory.views import dashboard_stats
 
 router = DefaultRouter()
 router.register(r'warehouses', WarehouseViewSet, basename='warehouse')
@@ -23,6 +24,8 @@ urlpatterns = [
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/register/', RegisterView.as_view(), name='register'),
     path('api/user/profile/', UserProfileView.as_view(), name='user-profile'),
+
+    path('api/dashboard/stats/', dashboard_stats, name='dashboard_stats'),
 
     path('api/', include(router.urls)),
 ]

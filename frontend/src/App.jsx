@@ -1,7 +1,7 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
+import Dashboard from "./pages/Dashboard.jsx";
 import Inventory from "./pages/Inventory";
 import Stock from "./pages/Stock";
 import Warehouses from "./pages/Warehouses";
