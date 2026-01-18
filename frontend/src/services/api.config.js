@@ -4,6 +4,8 @@ const ENDPOINTS = {
   AUTH: {
     LOGIN: "/token/",
     REFRESH: "/token/refresh/",
+    REGISTER: "/register/",     
+    PROFILE: "/user/profile/",    
   },
   INVENTORY: {
     CATEGORIES: "/categories/",
@@ -11,6 +13,7 @@ const ENDPOINTS = {
   },
   STOCK: {
     ITEMS: "/stock/",
+    MOVEMENTS: "/movements/",  
   },
   WAREHOUSES: {
     LIST: "/warehouses/",

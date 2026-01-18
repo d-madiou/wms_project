@@ -11,21 +11,35 @@ const apiClient = axios.create({
 
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("access");
+    const token = localStorage.getItem("access_token");
     
     if (token) {
-      const decoded = jwtDecode(token);
-      const isExpired = decoded.exp < Date.now() / 1000;
-      
-      if (isExpired) {
-        console.log("Token expired! (We need to handle refresh here later)");
+      try {
+        const decoded = jwtDecode(token);
+        const isExpired = decoded.exp < Date.now() / 1000;
+        
+        if (isExpired) {
+          console.warn("Token expired! Redirecting to login or refreshing...");
+        } else {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      } catch (error) {
+        console.error("Error decoding token:", error);
       }
-      
-      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
   (error) => {
+    return Promise.reject(error);
+  }
+);
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+        console.error("Unauthorized! Token might be invalid.");
+    }
     return Promise.reject(error);
   }
 );

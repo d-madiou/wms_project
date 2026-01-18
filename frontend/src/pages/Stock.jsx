@@ -1,240 +1,187 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 import Layout from "../components/Layout";
 import StockService from "../services/stock.service";
 import InventoryService from "../services/inventory.service";
 import WarehouseService from "../services/warehouse.service";
 
 const Stock = () => {
-  // --- DATA STATE ---
   const [stockItems, setStockItems] = useState([]);
   const [products, setProducts] = useState([]);
   const [locations, setLocations] = useState([]);
+  
+  // Form State
+  const [movementType, setMovementType] = useState("IN"); 
+  const [formData, setFormData] = useState({ product: "", location: "", quantity: 0 });
 
-  // --- UI STATE ---
-  const [mode, setMode] = useState("receive"); // Options: "receive" or "ship"
-  const [message, setMessage] = useState("");
-
-  // --- FORM STATE ---
-  const [selectedProduct, setSelectedProduct] = useState("");
-  const [selectedLocation, setSelectedLocation] = useState("");
-  const [quantity, setQuantity] = useState("");
+  const userRole = localStorage.getItem("user_role");
+  const canOperate = ["admin", "manager", "operator"].includes(userRole);
 
   useEffect(() => {
-    loadData();
+    // 1. Load everything in parallel
+    const initData = async () => {
+        try {
+            const [sRes, pRes, lRes] = await Promise.all([
+                StockService.getStockItems(),
+                InventoryService.getAllProducts(),
+                WarehouseService.getAllLocations()
+            ]);
+            setStockItems(sRes.data);
+            setProducts(pRes.data);
+            setLocations(lRes.data);
+        } catch (err) {
+            console.error("Error loading stock data:", err);
+        }
+    };
+    initData();
   }, []);
 
-  const loadData = async () => {
-    try {
-      const [stockRes, prodRes, locRes] = await Promise.all([
-        StockService.getAllStock(),
-        InventoryService.getProducts(),
-        WarehouseService.getLocations(),
-      ]);
-
-      setStockItems(stockRes.data);
-      setProducts(prodRes.data);
-      setLocations(locRes.data);
-    } catch (err) {
-      console.error("Error loading data", err);
-      setMessage("❌ Failed to load data. Check console.");
-    }
+  // --- HELPER FUNCTIONS TO FIND NAMES ---
+  const getProductName = (idOrObj) => {
+    // If backend sends an object: { id: 1, name: 'iPhone' }
+    if (typeof idOrObj === 'object' && idOrObj !== null) return idOrObj.name;
+    // If backend sends an ID: 1
+    const p = products.find(prod => prod.id === idOrObj);
+    return p ? p.name : `Product #${idOrObj}`;
   };
 
+  const getProductSku = (idOrObj) => {
+    if (typeof idOrObj === 'object' && idOrObj !== null) return idOrObj.sku;
+    const p = products.find(prod => prod.id === idOrObj);
+    return p ? p.sku : "-";
+  };
+
+  const getLocationName = (idOrObj) => {
+    if (typeof idOrObj === 'object' && idOrObj !== null) return idOrObj.name;
+    const l = locations.find(loc => loc.id === idOrObj);
+    return l ? `${l.name} (${l.warehouse_name || 'Whse'})` : `Loc #${idOrObj}`;
+  };
+
+  // --- SUBMIT HANDLER ---
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage(""); // Clear previous messages
-
-    if (!selectedProduct || !selectedLocation || !quantity) {
-      setMessage("⚠️ Please fill in all fields.");
-      return;
-    }
-
     try {
-      const payload = {
-        product: selectedProduct,
-        location: selectedLocation,
-        quantity: parseInt(quantity),
-      };
-
-      if (mode === "receive") {
-        // INBOUND LOGIC
-        await StockService.addStock(payload);
-        setMessage("Stock Received successfully! ✅");
+      if (movementType === "IN") {
+        await StockService.receiveStock(formData);
       } else {
-        // OUTBOUND LOGIC
-        await StockService.shipStock(payload);
-        setMessage("Stock Shipped successfully! 📦");
+        await StockService.shipStock(formData);
       }
-
-      setQuantity(""); // Reset quantity input
-      loadData(); // Refresh the table to show new numbers
+      alert("Operation Successful");
+      // Refresh only stock items
+      const res = await StockService.getStockItems();
+      setStockItems(res.data);
+      setFormData({ product: "", location: "", quantity: 0 });
     } catch (err) {
-      console.error(err);
-      // Extract error message from backend if available
-      const errorMsg = err.response?.data?.error || "Operation failed.";
-      setMessage(`❌ ${errorMsg}`);
+      alert("Operation Failed: " + (err.response?.data?.detail || err.message));
     }
   };
 
   return (
-    <Layout title="Stock Operations">
-      
-      <div className="max-w-4xl mx-auto">
-        
-        {/* --- MODE TOGGLE BUTTONS --- */}
-        <div className="flex gap-4 mb-6">
-          <button 
-            onClick={() => { setMode("receive"); setMessage(""); }}
-            className={`flex-1 py-4 rounded-lg font-bold text-lg transition shadow-sm ${
-              mode === "receive" 
-                ? "bg-green-600 text-white shadow-lg ring-4 ring-green-100 transform -translate-y-1" 
-                : "bg-white text-gray-500 hover:bg-gray-50"
-            }`}
-          >
-            📥 INBOUND (Receive)
-          </button>
-          <button 
-            onClick={() => { setMode("ship"); setMessage(""); }}
-            className={`flex-1 py-4 rounded-lg font-bold text-lg transition shadow-sm ${
-              mode === "ship" 
-                ? "bg-red-600 text-white shadow-lg ring-4 ring-red-100 transform -translate-y-1" 
-                : "bg-white text-gray-500 hover:bg-gray-50"
-            }`}
-          >
-            📤 OUTBOUND (Ship)
-          </button>
-        </div>
+    <Layout>
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold text-gray-800">Stock Operations</h2>
+        <p className="text-gray-500 text-sm mt-1">Track current stock levels {canOperate && "and move inventory"}.</p>
+      </div>
 
-        {/* --- OPERATION FORM --- */}
-        <div className="bg-white p-8 rounded-lg shadow-md mb-8 border border-gray-100">
-          <h3 className={`text-xl font-bold mb-6 flex items-center gap-2 ${
-            mode === "receive" ? "text-green-700" : "text-red-700"
-          }`}>
-            {mode === "receive" ? "📥 Receive Stock into Warehouse" : "📤 Ship Stock to Customer"}
-          </h3>
-          
-          {message && (
-            <div className={`mb-6 p-4 rounded text-sm font-medium ${
-              message.includes("❌") ? "bg-red-50 text-red-700" : 
-              message.includes("⚠️") ? "bg-yellow-50 text-yellow-700" :
-              "bg-green-50 text-green-700"
-            }`}>
-              {message}
-            </div>
-          )}
+      {/* --- OPERATION FORM --- */}
+      {canOperate && (
+        <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm mb-8">
+           {/* ... Same Form Code as before ... */}
+           {/* For brevity, I am keeping the JSX structure the same, just ensure inputs use formData */}
+           <div className="flex space-x-6 mb-6 border-b border-gray-100 pb-4">
+            <button 
+              className={`pb-2 text-sm font-bold border-b-2 transition-colors ${movementType === 'IN' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              onClick={() => setMovementType("IN")}
+            >
+              RECEIVE (Inbound)
+            </button>
+            <button 
+              className={`pb-2 text-sm font-bold border-b-2 transition-colors ${movementType === 'OUT' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              onClick={() => setMovementType("OUT")}
+            >
+              SHIP (Outbound)
+            </button>
+          </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              
-              {/* Product Select */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Product</label>
-                <select 
-                  className="w-full border-gray-300 border rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none transition" 
-                  value={selectedProduct}
-                  onChange={(e) => setSelectedProduct(e.target.value)}
-                  required
-                >
-                  <option value="">Select Product...</option>
-                  {products.map(p => (
-                    <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Location Select */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
-                <select 
-                  className="w-full border-gray-300 border rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none transition"
-                  value={selectedLocation}
-                  onChange={(e) => setSelectedLocation(e.target.value)}
-                  required
-                >
-                  <option value="">Select Location...</option>
-                  {locations.map(l => (
-                    <option key={l.id} value={l.id}>{l.name} ({l.warehouse_name})</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Quantity Input */}
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
-              <input 
-                type="number" 
-                className="w-full md:w-1/3 border-gray-300 border rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none transition"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                min="1"
-                placeholder="0"
+              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Product</label>
+              <select 
+                className="w-full border-gray-300 border p-2 rounded text-sm"
+                value={formData.product}
+                onChange={(e) => setFormData({ ...formData, product: e.target.value })}
                 required
+              >
+                <option value="">Select Product...</option>
+                {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Location</label>
+              <select 
+                className="w-full border-gray-300 border p-2 rounded text-sm"
+                value={formData.location}
+                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                required
+              >
+                <option value="">Select Location...</option>
+                {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Quantity</label>
+              <input 
+                type="number" min="1"
+                className="w-full border-gray-300 border p-2 rounded text-sm"
+                value={formData.quantity}
+                onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) })}
+                required 
               />
             </div>
-
-            {/* Submit Button */}
             <button 
-              type="submit" 
-              className={`w-full py-3 rounded-lg font-bold text-white transition shadow-md hover:shadow-lg ${
-                mode === "receive" 
-                  ? "bg-green-600 hover:bg-green-700" 
-                  : "bg-red-600 hover:bg-red-700"
+              type="submit"
+              className={`h-10 px-6 rounded text-sm font-bold text-white transition-colors ${
+                movementType === "IN" ? "bg-blue-600 hover:bg-blue-700" : "bg-red-600 hover:bg-red-700"
               }`}
             >
-              {mode === "receive" ? "Confirm Receipt (+ Stock)" : "Confirm Shipment (- Stock)"}
+              CONFIRM {movementType}
             </button>
           </form>
         </div>
+      )}
 
-        {/* --- STOCK TABLE --- */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
-            <h3 className="font-bold text-gray-700">Current Inventory Levels</h3>
-          </div>
-          <table className="min-w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {stockItems.map((item) => (
-                <tr key={item.id} className="hover:bg-gray-50 transition">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{item.product_details?.name}</div>
-                    <div className="text-xs text-gray-500">{item.product_details?.sku}</div>
+      {/* --- STOCK TABLE --- */}
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-gray-50 border-b border-gray-200 text-gray-600 uppercase text-xs font-semibold">
+            <tr>
+              <th className="px-6 py-4">Product Name</th>
+              <th className="px-6 py-4">SKU</th>
+              <th className="px-6 py-4">Location</th>
+              <th className="px-6 py-4 text-right">Quantity On Hand</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {stockItems.length === 0 ? (
+               <tr><td colSpan="4" className="px-6 py-8 text-center text-gray-500">Inventory is empty.</td></tr>
+            ) : (
+              stockItems.map((item) => (
+                <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                  {/* USE HELPERS HERE to handle both IDs and Objects */}
+                  <td className="px-6 py-4 font-medium text-gray-900">
+                      {item.product_name || getProductName(item.product)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                    <span className="px-2 py-1 bg-gray-100 rounded text-xs font-mono">
-                      {item.location_details?.name}
-                    </span>
+                  <td className="px-6 py-4 font-mono text-gray-500">
+                      {item.product_sku || getProductSku(item.product)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 rounded text-sm font-bold ${
-                      item.quantity < 10 ? "text-red-600 bg-red-50" : "text-green-600 bg-green-50"
-                    }`}>
-                      {item.quantity} units
-                    </span>
+                  <td className="px-6 py-4 text-gray-700">
+                      {item.location_name || getLocationName(item.location)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(item.updated_at).toLocaleDateString()}
-                  </td>
+                  <td className="px-6 py-4 text-right font-bold text-gray-900">{item.quantity}</td>
                 </tr>
-              ))}
-              {stockItems.length === 0 && (
-                <tr>
-                  <td colSpan="4" className="px-6 py-8 text-center text-gray-500 italic">
-                    No stock found in the system.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
     </Layout>
   );

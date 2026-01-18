@@ -1,11 +1,12 @@
 import apiClient from "./api.client";
 import { ENDPOINTS } from "./api.config";
 
-const getWarehouses = () => {
+const getAllWarehouses = () => {
   return apiClient.get(ENDPOINTS.WAREHOUSES.LIST);
 };
 
-const getLocations = () => {
+
+const getAllLocations = () => {
   return apiClient.get(ENDPOINTS.WAREHOUSES.LOCATIONS);
 };
 
@@ -18,8 +19,8 @@ const createLocation = (data) => {
 };
 
 const WarehouseService = {
-  getWarehouses,
-  getLocations,
+  getAllWarehouses,
+  getAllLocations,  
   createWarehouse,
   createLocation,
 };

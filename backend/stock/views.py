@@ -1,9 +1,10 @@
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from .models import StockItem
-from .serializers import StockItemSerializer
+from .models import StockItem, StockMovement
+from .serializers import StockItemSerializer, StockMovementSerializer
 from rest_framework.decorators import action
+from users.permissions import IsOperatorOrHigher
 
 class StockItemViewSet(viewsets.ModelViewSet):
     queryset = StockItem.objects.all()
@@ -19,19 +20,28 @@ class StockItemViewSet(viewsets.ModelViewSet):
         location_id = request.data.get('location')
         quantity = int(request.data.get('quantity', 0))
 
-        existing_stock = StockItem.objects.filter(
-            product_id=product_id, 
-            location_id=location_id
-        ).first()
+        # --- LOGIC START ---
+        existing_stock = StockItem.objects.filter(product_id=product_id, location_id=location_id).first()
 
         if existing_stock:
             existing_stock.quantity += quantity
             existing_stock.save()
-            
-            serializer = self.get_serializer(existing_stock)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            response_data = self.get_serializer(existing_stock).data
         else:
-            return super().create(request, *args, **kwargs)
+            # Standard Create
+            response = super().create(request, *args, **kwargs)
+            response_data = response.data
+        
+        # === 📝 AUDIT LOG (NEW) ===
+        StockMovement.objects.create(
+            product_id=product_id,
+            location_id=location_id,
+            quantity=quantity,
+            movement_type='IN',
+            user=request.user
+        )
+        
+        return Response(response_data, status=status.HTTP_200_OK)
         
     @action(detail=False, methods=['post'])
     def ship(self, request):
@@ -46,13 +56,36 @@ class StockItemViewSet(viewsets.ModelViewSet):
         stock_item = StockItem.objects.filter(product_id=product_id, location_id=location_id).first()
 
         if not stock_item:
-            return Response({"error": "Stock not found in this location"}, status=status.HTTP_404_NOT_FOUND)
-
+            return Response({"error": "Stock not found"}, status=404)
         if stock_item.quantity < quantity:
-            return Response({"error": "Not enough stock!"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Not enough stock"}, status=400)
 
-        # Reduce stock
         stock_item.quantity -= quantity
         stock_item.save()
-        
-        return Response({"status": "shipped", "remaining": stock_item.quantity}, status=status.HTTP_200_OK)
+
+        # === 📝 AUDIT LOG (NEW) ===
+        StockMovement.objects.create(
+            product_id=product_id,
+            location_id=location_id,
+            quantity=quantity,
+            movement_type='OUT',
+            user=request.user
+        )
+
+        return Response({"status": "shipped"}, status=200)
+    
+class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Read-only view for history. No deleting history allowed!
+    """
+    queryset = StockMovement.objects.all().order_by('-created_at')
+    serializer_class = StockMovementSerializer
+    
+    def get_permissions(self):
+        # READ: Everyone (including Drivers)
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [IsAuthenticated]
+        # WRITE: Only Operators and up (No Drivers)
+        else:
+            permission_classes = [IsOperatorOrHigher]
+        return [permission() for permission in permission_classes]
