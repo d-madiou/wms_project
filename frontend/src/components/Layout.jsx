@@ -1,14 +1,25 @@
 import React, { useState } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion"; // Animation library
+import { 
+  LayoutDashboard, 
+  Package, 
+  ArrowRightLeft, 
+  Warehouse, 
+  History, 
+  LogOut, 
+  Menu, 
+  X,
+  ChevronRight
+} from "lucide-react"; // Beautiful icons
 import AuthService from "../services/auth.service";
 
 const Layout = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const navigate = useNavigate();
   const location = useLocation();
-  
-  const userRole = localStorage.getItem("user_role") || "guest";
+  const navigate = useNavigate();
   const username = localStorage.getItem("user_name") || "User";
+  const userRole = localStorage.getItem("user_role") || "Guest";
 
   const handleLogout = () => {
     AuthService.logout();
@@ -16,96 +27,114 @@ const Layout = ({ children }) => {
   };
 
   const navItems = [
-    { label: "Dashboard", path: "/dashboard" },
-    { label: "Inventory", path: "/inventory" },
-    { label: "Stock Operations", path: "/stock" },
-    { label: "Warehouses", path: "/warehouses" },
-    { label: "History", path: "/history" },
+    { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+    { label: "Inventory", path: "/inventory", icon: Package },
+    { label: "Operations", path: "/stock", icon: ArrowRightLeft },
+    { label: "Warehouses", path: "/warehouses", icon: Warehouse },
+    { label: "Audit Log", path: "/history", icon: History },
   ];
 
-  return (
-    <div className="flex h-screen bg-gray-50 font-sans text-gray-900 overflow-hidden">
-      
-      {isSidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-20 md:hidden transition-opacity"
-          onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
+  const SidebarContent = () => (
+    <div className="flex flex-col h-full bg-slate-900 text-white shadow-xl">
+      {/* Brand */}
+      <div className="h-20 flex items-center px-8 border-b border-slate-800">
+        <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center mr-3 shadow-lg shadow-indigo-500/20">
+          <span className="font-bold text-white text-lg">H</span>
+        </div>
+        <span className="text-xl font-bold tracking-tight">The House</span>
+      </div>
 
-      {/* --- SIDEBAR --- */}
-      <aside 
-        className={`
-          fixed md:static inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-200 flex flex-col justify-between transition-transform duration-300 ease-in-out
-          ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}
-          md:translate-x-0
-        `}
-      >
-        <div>
-          {/* Sidebar Header */}
-          <div className="h-16 flex items-center justify-between px-6 border-b border-gray-100">
-            <h1 className="text-xl font-bold tracking-tight text-gray-800">WMS Project</h1>
-            
-            <button 
-              onClick={() => setIsSidebarOpen(false)} 
-              className="md:hidden text-gray-500 hover:text-gray-700"
+      {/* Navigation */}
+      <nav className="flex-1 px-4 py-6 space-y-2">
+        {navItems.map((item) => {
+          const isActive = location.pathname === item.path;
+          return (
+            <Link
+              key={item.path}
+              to={item.path}
+              onClick={() => setIsSidebarOpen(false)}
+              className={`relative flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 group ${
+                isActive 
+                  ? "bg-blue-600 text-white shadow-md shadow-indigo-900/20" 
+                  : "text-slate-400 hover:bg-slate-800 hover:text-white"
+              }`}
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-          </div>
-          
-         
-          <nav className="p-4 space-y-1">
-            {navItems.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => setIsSidebarOpen(false)}
-                className={`block px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                  location.pathname === item.path
-                    ? "bg-gray-100 text-gray-900"
-                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
+              <item.icon size={20} className={`mr-3 ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-white'}`} />
+              {item.label}
+              {isActive && (
+                <motion.div 
+                  layoutId="activeIndicator"
+                  className="absolute right-0 w-1 h-8 bg-indigo-400 rounded-l-full"
+                />
+              )}
+            </Link>
+          );
+        })}
+      </nav>
 
-       
-        <div className="p-4 border-t border-gray-100">
-          <div className="mb-3 px-2">
-            <p className="text-sm font-bold text-gray-900 truncate">{username}</p>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{userRole}</p>
+      {/* User Footer */}
+      <div className="p-4 border-t border-slate-800 bg-slate-900/50">
+        <div className="flex items-center mb-4 px-2">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-orange-500 to-orange-500 flex items-center justify-center text-white font-bold">
+            {username.charAt(0).toUpperCase()}
           </div>
-          <button
-            onClick={handleLogout}
-            className="w-full text-left px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-md transition-colors"
-          >
-            Sign Out
-          </button>
+          <div className="ml-3">
+            <p className="text-sm font-semibold text-white">{username}</p>
+            <p className="text-xs text-slate-500 capitalize">{userRole}</p>
+          </div>
         </div>
-      </aside>
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-red-900/10 rounded-lg transition-colors"
+        >
+          <LogOut size={16} className="mr-2" />
+          Sign Out
+        </button>
+      </div>
+    </div>
+  );
 
+  return (
+    <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
+      {/* Mobile Overlay */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsSidebarOpen(false)}
+            className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Sidebar */}
+      <div
+        className={`fixed inset-y-0 left-0 z-50 w-72 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <SidebarContent />
+      </div>
+
+      {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        
-        <header className="md:hidden bg-white border-b border-gray-200 h-16 flex items-center justify-between px-4">
-          <span className="font-bold text-lg text-gray-800">WMS Project</span>
-          <button 
-            onClick={() => setIsSidebarOpen(true)}
-            className="text-gray-600 hover:bg-gray-100 p-2 rounded-md focus:outline-none"
-          >
-  
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+        {/* Mobile Header */}
+        <header className="md:hidden flex items-center justify-between p-4 bg-white border-b border-slate-200">
+          <span className="font-bold text-slate-800">The House</span>
+          <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-slate-600">
+            <Menu size={24} />
           </button>
         </header>
 
-        <main className="flex-1 overflow-auto p-4 md:p-8">
-          {children}
+        {/* Page Content */}
+        <main className="flex-1 overflow-auto p-4 md:p-8 relative">
+           {/* Background decoration */}
+           <div className="absolute top-0 left-0 w-full h-64 bg-gradient-to-b from-indigo-50 to-slate-50 -z-10" />
+           {children}
         </main>
       </div>
-
     </div>
   );
 };

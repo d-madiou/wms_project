@@ -1,7 +1,6 @@
 import apiClient from "./api.client";
 import { ENDPOINTS } from "./api.config";
 
-// --- RENAMED to match Inventory.jsx ---
 const getAllProducts = () => {
   return apiClient.get(ENDPOINTS.INVENTORY.PRODUCTS);
 };
@@ -9,15 +8,14 @@ const getAllProducts = () => {
 const createProduct = (productData) => {
   return apiClient.post(ENDPOINTS.INVENTORY.PRODUCTS, productData);
 };
-
-const getCategories = () => {
-  return apiClient.get(ENDPOINTS.INVENTORY.CATEGORIES);
+const getAllCategories = () => {
+  return apiClient.get("/categories/");
 };
 
 const InventoryService = {
-  getAllProducts, // Now matches the Component call
+  getAllProducts,
   createProduct,
-  getCategories,
+  getAllCategories,
 };
 
 export default InventoryService;
